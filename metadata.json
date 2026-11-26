@@ -1,0 +1,6 @@
+{
+  "name": "FireZone",
+  "description": "Tactical battle royale and arena shooter featuring Battle Royale, Clash Squad, Lone Wolf 1v1, character active skills, deployable Gloo Walls, and full sensitivity & HUD customization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
