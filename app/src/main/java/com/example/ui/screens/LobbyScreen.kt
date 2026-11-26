@@ -89,8 +89,10 @@ fun LobbyScreen(
     onStartMatch: (GameMode) -> Unit,
     onSelectOrUnlockCharacter: (CharacterId) -> Unit,
     onUpgradeCharacter: (CharacterId) -> Unit,
+    onOpenProfile: () -> Unit,
     onOpenArmory: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCustomHud: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val profile = appData.profile
@@ -134,7 +136,7 @@ fun LobbyScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top-Left Player Card
+            // Top-Left Player Card (Tap to open Profile Screen!)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -142,7 +144,9 @@ fun LobbyScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(ObsidianBg.copy(alpha = 0.78f))
                     .border(1.dp, AmberGold.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenProfile)
                     .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("lobby_profile_card")
             ) {
                 CharacterPortrait(
                     characterId = activeChar,
@@ -163,11 +167,22 @@ fun LobbyScreen(
                 CurrencyBadge(label = "DIA", value = "${profile.diamonds}", accent = GlooCyan)
             }
 
-            // Top-Right Action Icons (Settings, Armory)
+            // Top-Right Action Icons (Custom HUD, Armory, Settings)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ObsidianBg.copy(alpha = 0.78f))
+                        .border(1.dp, GlooCyan.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenCustomHud)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("lobby_custom_hud_button")
+                ) {
+                    Text("CUSTOM HUD", style = MaterialTheme.typography.labelLarge, color = GlooCyan)
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -177,7 +192,7 @@ fun LobbyScreen(
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                         .testTag("lobby_armory_button")
                 ) {
-                    Text("WEAPON ARMORY", style = MaterialTheme.typography.labelLarge, color = AmberGold)
+                    Text("ARMORY", style = MaterialTheme.typography.labelLarge, color = AmberGold)
                 }
                 IconButton(
                     onClick = onOpenSettings,
@@ -224,6 +239,13 @@ fun LobbyScreen(
                     activePanel = if (activePanel == LobbyOverlayPanel.RANK) LobbyOverlayPanel.NONE else LobbyOverlayPanel.RANK
                 },
                 testTag = "rail_rank"
+            )
+            LobbyRailButton(
+                label = "PROFILE",
+                icon = Icons.Filled.Bolt,
+                selected = false,
+                onClick = onOpenProfile,
+                testTag = "rail_profile"
             )
             LobbyRailButton(
                 label = "ARMORY",
@@ -318,7 +340,7 @@ fun LobbyScreen(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = character.skillName,
+                                            text = "${character.roleTag} • ${character.skillName}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = character.accentColor
                                         )

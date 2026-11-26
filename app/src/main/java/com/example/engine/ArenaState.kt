@@ -16,7 +16,10 @@ enum class ObstacleType {
     BUILDING,
     CRATE,
     ROCK,
-    TREE
+    TREE,
+    CONTAINER_BLUE,
+    CONTAINER_RED,
+    VAN
 }
 
 enum class LootType {
@@ -180,6 +183,11 @@ data class Combatant(
     val skillActiveSec: Float = 0f,
     val medkitChannelSec: Float = 0f,
     val isScoped: Boolean = false,
+    val isCrouching: Boolean = false,
+    val isSprinting: Boolean = false,
+    val jumpHeightMeters: Float = 0f,
+    val jumpVelocity: Float = 0f,
+    val markedSec: Float = 0f,
     val isBushDisguised: Boolean = false,
     val muzzleFlashSec: Float = 0f,
     val kills: Int = 0,

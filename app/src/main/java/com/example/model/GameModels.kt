@@ -26,7 +26,7 @@ enum class GameMode(
     CLASH_SQUAD(
         title = "Clash Squad",
         subtitle = "4v4 Tactical Rounds • Buy Shop Economy",
-        mapName = "Clock Tower Arena",
+        mapName = "Container Hangar",
         badge = "CS 4v4",
         squadLabel = "4v4 SQUAD"
     ),
@@ -196,6 +196,7 @@ enum class WeaponId(
 enum class CharacterId(
     val displayName: String,
     val title: String,
+    val roleTag: String,
     val skillName: String,
     val skillType: String,
     val shortSummary: String,
@@ -208,11 +209,12 @@ enum class CharacterId(
     ALOK(
         displayName = "Alok",
         title = "DJ Pulse",
+        roleTag = "SUPPORT / RUSHER",
         skillName = "Drop the Beat",
         skillType = "ACTIVE",
-        shortSummary = "5m Aura: +5 HP/s & +18% Move Speed",
-        detailedEffect = "Creates a tactical sound aura around you that heals +5 HP/sec and boosts movement speed by 18% for you and nearby allies.",
-        baseCooldownSec = 32f,
+        shortSummary = "5m Aura: +6 HP/s & +18% Move Speed",
+        detailedEffect = "Creates a tactical sound aura around you that heals +6 HP/sec and boosts movement speed by 18% for you and nearby allies.",
+        baseCooldownSec = 30f,
         baseDurationSec = 8f,
         unlockCostGold = 0,
         accentColor = AmberGold
@@ -220,11 +222,12 @@ enum class CharacterId(
     CHRONO(
         displayName = "Chrono",
         title = "Time Turner",
+        roleTag = "TANK / DEFENDER",
         skillName = "Force Field",
         skillType = "ACTIVE",
         shortSummary = "Impenetrable Dome Shield (Blocks Enemy Fire)",
         detailedEffect = "Projects an energy dome shield that blocks all incoming enemy bullets while letting you fire outward from inside.",
-        baseCooldownSec = 38f,
+        baseCooldownSec = 36f,
         baseDurationSec = 5f,
         unlockCostGold = 1200,
         accentColor = GlooCyan
@@ -232,11 +235,12 @@ enum class CharacterId(
     SKYLER(
         displayName = "Skyler",
         title = "Riptide Rhythm",
+        roleTag = "BREACHER",
         skillName = "Sonic Wave",
         skillType = "ACTIVE + PASSIVE",
         shortSummary = "Shatters Gloo Walls + Heals +35 HP per Gloo Wall",
         detailedEffect = "Unleashes a forward sonic blast that instantly destroys enemy Gloo Walls. Passively heals +35 HP every time you deploy a Gloo Wall.",
-        baseCooldownSec = 28f,
+        baseCooldownSec = 26f,
         baseDurationSec = 1.2f,
         unlockCostGold = 1500,
         accentColor = CrimsonStrike
@@ -244,11 +248,12 @@ enum class CharacterId(
     WUKONG(
         displayName = "Wukong",
         title = "Monkey King",
+        roleTag = "STEALTH FLANKER",
         skillName = "Camouflage",
         skillType = "ACTIVE",
         shortSummary = "Bush Stealth (Resets Cooldown on Elimination)",
         detailedEffect = "Transforms into a tactical bush, breaking enemy bot target lock until you fire. Eliminating an enemy immediately resets cooldown.",
-        baseCooldownSec = 35f,
+        baseCooldownSec = 32f,
         baseDurationSec = 6f,
         unlockCostGold = 1400,
         accentColor = EmeraldHeal
@@ -256,9 +261,10 @@ enum class CharacterId(
     KELLY(
         displayName = "Kelly",
         title = "The Swift",
+        roleTag = "RUSHER",
         skillName = "Deadly Velocity",
         skillType = "ACTIVE + PASSIVE",
-        shortSummary = "+16% Permanent Speed & +25% Burst Shot",
+        shortSummary = "+16% Permanent Speed & +25% Burst Damage",
         detailedEffect = "Always moves 16% faster across the map. Activating Deadly Velocity grants a 5s adrenaline surge boosting damage by 25%.",
         baseCooldownSec = 24f,
         baseDurationSec = 5f,
@@ -268,13 +274,92 @@ enum class CharacterId(
     K_MASTER(
         displayName = "K",
         title = "Master of All",
+        roleTag = "SURVIVOR",
         skillName = "Jiu-Jitsu",
         skillType = "ACTIVE + PASSIVE",
         shortSummary = "+50 Max EP & Rapid EP-to-HP Conversion",
-        detailedEffect = "Increases Max EP by 50 and steadily regenerates EP. Activating Jiu-Jitsu converts EP into HP at 6 HP/sec for rapid recovery.",
+        detailedEffect = "Increases Max EP by 50 and steadily regenerates EP. Activating Jiu-Jitsu converts EP into HP rapidly for sustained fights.",
         baseCooldownSec = 20f,
         baseDurationSec = 7f,
         unlockCostGold = 1800,
+        accentColor = ArmorBlue
+    ),
+    MOCO(
+        displayName = "Moco",
+        title = "Cyber Enigma",
+        roleTag = "RECON / INFO",
+        skillName = "Hacker's Eye",
+        skillType = "PASSIVE + RECON",
+        shortSummary = "Marks hit enemies on radar + +12% Headshot Crit",
+        detailedEffect = "Enemies shot by Moco stay tagged on your minimap for 6 seconds and take +12% extra headshot damage.",
+        baseCooldownSec = 22f,
+        baseDurationSec = 6f,
+        unlockCostGold = 900,
+        accentColor = PurpleMythic
+    ),
+    RAFAEL(
+        displayName = "Rafael",
+        title = "Dead Silent",
+        roleTag = "SNIPER / ASSASSIN",
+        skillName = "Silenced Edge",
+        skillType = "PASSIVE",
+        shortSummary = "Silences Sniper & Rifle shots + +15% Armor Pierce",
+        detailedEffect = "Suppresses gunfire signature and deals +15% bonus armor-piercing damage with rifles and snipers.",
+        baseCooldownSec = 24f,
+        baseDurationSec = 5f,
+        unlockCostGold = 1100,
+        accentColor = Color(0xFF90A4AE)
+    ),
+    A124(
+        displayName = "A124",
+        title = "Cyber Android",
+        roleTag = "DISRUPTOR",
+        skillName = "Thrill of Battle",
+        skillType = "ACTIVE",
+        shortSummary = "20m EMP Pulse + Converts 40 EP to HP",
+        detailedEffect = "Emits an electromagnetic wave that disrupts nearby enemy skills and rapidly converts 40 EP into HP.",
+        baseCooldownSec = 26f,
+        baseDurationSec = 5f,
+        unlockCostGold = 1300,
+        accentColor = GlooCyan
+    ),
+    ALVARO(
+        displayName = "Alvaro",
+        title = "Demolitionist",
+        roleTag = "HEAVY BREACHER",
+        skillName = "Art of Demolition",
+        skillType = "PASSIVE + BURST",
+        shortSummary = "+18% Heavy & Shotgun Damage + Gloo Breaker",
+        detailedEffect = "Boosts Shotguns, Pistols, and Sonic/Gloo-breaking damage by 18% and deals double damage against enemy Gloo Walls.",
+        baseCooldownSec = 25f,
+        baseDurationSec = 5f,
+        unlockCostGold = 1000,
+        accentColor = BlazingOrange
+    ),
+    NIKITA(
+        displayName = "Nikita",
+        title = "Firearms Expert",
+        roleTag = "SMG SPECIALIST",
+        skillName = "Rapid Mag",
+        skillType = "PASSIVE",
+        shortSummary = "+35% Faster Reload & +15% SMG Damage",
+        detailedEffect = "Reloads every firearm 35% faster and boosts SMG close-quarters damage by 15%.",
+        baseCooldownSec = 22f,
+        baseDurationSec = 5f,
+        unlockCostGold = 750,
+        accentColor = AmberGold
+    ),
+    FORD(
+        displayName = "Ford",
+        title = "Iron Will",
+        roleTag = "ZONE SURVIVOR",
+        skillName = "Iron Will",
+        skillType = "ACTIVE + PASSIVE",
+        shortSummary = "-35% Blue Zone Damage & Instant +25 HP Guard",
+        detailedEffect = "Reduces damage taken outside the Safe Zone by 35% and activates a temporary +25 HP & armor boost on demand.",
+        baseCooldownSec = 25f,
+        baseDurationSec = 6f,
+        unlockCostGold = 600,
         accentColor = ArmorBlue
     )
 }
@@ -296,6 +381,47 @@ enum class GraphicsQuality(val label: String) {
     ULTRA("Ultra")
 }
 
+enum class HudButtonId(val label: String, val defaultX: Float, val defaultY: Float, val defaultScale: Float = 1.0f) {
+    MINIMAP("Minimap", 0.085f, 0.145f, 1.0f),
+    JOYSTICK("Joystick", 0.125f, 0.775f, 1.0f),
+    SPRINT("Sprint", 0.125f, 0.515f, 0.95f),
+    MEDKIT("Medkit", 0.235f, 0.655f, 0.95f),
+    GLOO_WALL("Gloo Wall", 0.245f, 0.815f, 1.05f),
+    LEFT_FIRE("Left Fire", 0.075f, 0.405f, 0.95f),
+    FIRE("Fire", 0.895f, 0.780f, 1.05f),
+    SCOPE("Scope", 0.925f, 0.525f, 1.0f),
+    JUMP("Jump", 0.825f, 0.560f, 0.95f),
+    CROUCH("Crouch", 0.765f, 0.840f, 0.95f),
+    RELOAD("Reload", 0.815f, 0.405f, 0.92f),
+    SKILL("Skill", 0.745f, 0.680f, 1.0f),
+    WEAPON_BAR("Weapons", 0.875f, 0.165f, 1.0f)
+}
+
+data class HudElementLayout(
+    val xFraction: Float,
+    val yFraction: Float,
+    val scale: Float = 1.0f,
+    val alpha: Float = 0.88f
+)
+
+fun defaultHudLayout(): Map<HudButtonId, HudElementLayout> =
+    HudButtonId.entries.associateWith { btn ->
+        HudElementLayout(
+            xFraction = btn.defaultX,
+            yFraction = btn.defaultY,
+            scale = btn.defaultScale,
+            alpha = 0.88f
+        )
+    }
+
+data class MatchHistoryEntry(
+    val modeName: String,
+    val victory: Boolean,
+    val kills: Int,
+    val damage: Int,
+    val timestampLabel: String
+)
+
 data class GameSettings(
     val generalSens: Int = 78,
     val redDotSens: Int = 72,
@@ -304,7 +430,7 @@ data class GameSettings(
     val sniperSens: Int = 45,
     val freeLookSens: Int = 70,
     val aimPrecision: AimPrecision = AimPrecision.DEFAULT,
-    val leftFireMode: LeftFireMode = LeftFireMode.SCOPE_ONLY,
+    val leftFireMode: LeftFireMode = LeftFireMode.ALWAYS,
     val quickWeaponSwitch: Boolean = true,
     val quickReload: Boolean = true,
     val smartGlooWall: Boolean = true,
@@ -316,11 +442,22 @@ data class GameSettings(
     val newDamageIndicator: Boolean = true,
     val masterVolume: Int = 85,
     val sfxVolume: Int = 90,
-    val uiAudioEnabled: Boolean = true
-)
+    val uiAudioEnabled: Boolean = true,
+    val activeHudPreset: Int = 1,
+    val hudLayoutPreset1: Map<HudButtonId, HudElementLayout> = defaultHudLayout(),
+    val hudLayoutPreset2: Map<HudButtonId, HudElementLayout> = defaultHudLayout()
+) {
+    val activeHudLayout: Map<HudButtonId, HudElementLayout>
+        get() = if (activeHudPreset == 2) hudLayoutPreset2 else hudLayoutPreset1
+}
 
 data class PlayerProfile(
     val callsign: String = "STRIKER_01",
+    val uid: String = "3528332301",
+    val guildName: String = "NoFear_Squad",
+    val bio: String = "Rush & One-Tap Headshots • Booyah!",
+    val likes: Int = 248,
+    val battleTitles: List<String> = listOf("HEADSHOT ARTIST", "CHAINKILLER", "GLOO MASTER", "BOOYAH KING"),
     val gold: Int = 2200,
     val diamonds: Int = 150,
     val rankPoints: Int = 1250,
@@ -329,7 +466,8 @@ data class PlayerProfile(
     val matchesPlayed: Int = 0,
     val selectedCharacter: CharacterId = CharacterId.ALOK,
     val unlockedCharacters: Set<CharacterId> = setOf(CharacterId.ALOK),
-    val characterLevels: Map<CharacterId, Int> = CharacterId.entries.associateWith { 1 }
+    val characterLevels: Map<CharacterId, Int> = CharacterId.entries.associateWith { 1 },
+    val matchHistory: List<MatchHistoryEntry> = emptyList()
 ) {
     val rankTier: String
         get() = when {

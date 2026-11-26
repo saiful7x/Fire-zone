@@ -71,6 +71,8 @@ fun SettingsScreen(
     onUpdateSettings: ((GameSettings) -> GameSettings) -> Unit,
     onResetSensitivity: () -> Unit,
     onUpdateCallsign: (String) -> Unit,
+    onOpenCustomHud: () -> Unit,
+    onSelectHudPreset: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val settings = appData.settings
@@ -231,6 +233,51 @@ fun SettingsScreen(
                             }
                             ToggleRow("Smart Gloo Wall", "Instant 1-tap Gloo Wall deploy in front of aim", settings.smartGlooWall) { checked ->
                                 onUpdateSettings { it.copy(smartGlooWall = checked) }
+                            }
+                        }
+                    }
+
+                    item {
+                        SettingsSectionCard(title = "CUSTOM HUD (DRAG & ARRANGE CONTROLS)") {
+                            Text(
+                                text = "Arrange Fire, Gloo Wall, Joystick, Jump, Crouch, Scope, Skill, and Minimap anywhere on screen.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(1, 2).forEach { preset ->
+                                    val selected = settings.activeHudPreset == preset
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (selected) GlooCyan else ObsidianBg)
+                                            .border(1.dp, if (selected) GlooCyan else TacticalBorder, RoundedCornerShape(8.dp))
+                                            .clickable { onSelectHudPreset(preset) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "PRESET $preset",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (selected) ObsidianBg else Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            Button(
+                                onClick = onOpenCustomHud,
+                                colors = ButtonDefaults.buttonColors(containerColor = AmberGold, contentColor = ObsidianBg),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                                    .testTag("open_custom_hud_button")
+                            ) {
+                                Text("CUSTOM HUD (MOVE & RESIZE)", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

@@ -40,7 +40,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.match.MatchScreen
 import com.example.ui.screens.ArmoryScreen
+import com.example.ui.screens.CustomHudEditorScreen
 import com.example.ui.screens.LobbyScreen
+import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.AmberGold
 import com.example.ui.theme.FireZoneTheme
@@ -51,6 +53,8 @@ import com.example.viewmodel.GameViewModel
 private const val ROUTE_LOBBY = "lobby"
 private const val ROUTE_ARMORY = "armory"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_PROFILE = "profile"
+private const val ROUTE_CUSTOM_HUD = "custom_hud"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +90,9 @@ fun FireZoneApp(gameViewModel: GameViewModel = viewModel()) {
             onDeployGlooWall = gameViewModel::deployGlooWall,
             onActivateSkill = gameViewModel::activateSkill,
             onToggleScope = gameViewModel::toggleScope,
+            onJump = gameViewModel::jump,
+            onToggleCrouch = gameViewModel::toggleCrouch,
+            onToggleSprint = gameViewModel::toggleSprint,
             onSwitchWeapon = gameViewModel::switchWeapon,
             onReloadWeapon = gameViewModel::reloadWeapon,
             onUseMedkit = gameViewModel::useMedkit,
@@ -93,6 +100,7 @@ fun FireZoneApp(gameViewModel: GameViewModel = viewModel()) {
             onBuyCsItem = gameViewModel::buyCsItem,
             onStartCombatFromShop = gameViewModel::startCombatFromShop,
             onSelectLoneWolfLoadout = gameViewModel::selectLoneWolfLoadout,
+            onSaveCustomHud = gameViewModel::saveHudLayout,
             onPauseChanged = gameViewModel::setPaused,
             onPlayAgain = { gameViewModel.startMatch(currentMatch.mode) },
             onExitMatch = gameViewModel::exitMatch
@@ -117,6 +125,10 @@ fun FireZoneApp(gameViewModel: GameViewModel = viewModel()) {
                 onStartMatch = gameViewModel::startMatch,
                 onSelectOrUnlockCharacter = gameViewModel::selectOrUnlockCharacter,
                 onUpgradeCharacter = gameViewModel::upgradeCharacter,
+                onOpenProfile = {
+                    gameViewModel.soundEngine.playUiClick()
+                    navController.navigate(ROUTE_PROFILE)
+                },
                 onOpenArmory = {
                     gameViewModel.soundEngine.playUiClick()
                     navController.navigate(ROUTE_ARMORY)
@@ -124,7 +136,28 @@ fun FireZoneApp(gameViewModel: GameViewModel = viewModel()) {
                 onOpenSettings = {
                     gameViewModel.soundEngine.playUiClick()
                     navController.navigate(ROUTE_SETTINGS)
+                },
+                onOpenCustomHud = {
+                    gameViewModel.soundEngine.playUiClick()
+                    navController.navigate(ROUTE_CUSTOM_HUD)
                 }
+            )
+        }
+        composable(ROUTE_PROFILE) {
+            BackHandler { navController.popBackStack() }
+            ProfileScreen(
+                appData = appData,
+                onLikeProfile = gameViewModel::likeProfile,
+                onSaveProfileMeta = gameViewModel::updateProfileMeta,
+                onClose = { navController.popBackStack() }
+            )
+        }
+        composable(ROUTE_CUSTOM_HUD) {
+            BackHandler { navController.popBackStack() }
+            CustomHudEditorScreen(
+                settings = appData.settings,
+                onSaveLayout = gameViewModel::saveHudLayout,
+                onClose = { navController.popBackStack() }
             )
         }
         composable(ROUTE_ARMORY) {
@@ -146,7 +179,12 @@ fun FireZoneApp(gameViewModel: GameViewModel = viewModel()) {
                     appData = appData,
                     onUpdateSettings = gameViewModel::updateSettings,
                     onResetSensitivity = gameViewModel::resetSensitivity,
-                    onUpdateCallsign = gameViewModel::updateCallsign
+                    onUpdateCallsign = gameViewModel::updateCallsign,
+                    onOpenCustomHud = {
+                        gameViewModel.soundEngine.playUiClick()
+                        navController.navigate(ROUTE_CUSTOM_HUD)
+                    },
+                    onSelectHudPreset = gameViewModel::setActiveHudPreset
                 )
             }
         }

@@ -14,6 +14,9 @@ import com.example.model.AppDataState
 import com.example.model.CharacterId
 import com.example.model.GameMode
 import com.example.model.GameSettings
+import com.example.model.HudButtonId
+import com.example.model.HudElementLayout
+import com.example.model.defaultHudLayout
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,6 +112,44 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateProfileMeta(callsign: String, guildName: String, bio: String) {
+        soundEngine.playUiClick()
+        viewModelScope.launch {
+            repository.updateProfileMeta(callsign, guildName, bio)
+        }
+    }
+
+    fun likeProfile() {
+        soundEngine.playUiClick()
+        viewModelScope.launch {
+            repository.incrementLikes()
+        }
+    }
+
+    fun setActiveHudPreset(preset: Int) {
+        soundEngine.playUiClick()
+        updateSettings { it.copy(activeHudPreset = preset.coerceIn(1, 2)) }
+    }
+
+    fun saveHudLayout(preset: Int, layout: Map<HudButtonId, HudElementLayout>) {
+        soundEngine.playUiClick()
+        updateSettings {
+            if (preset == 2) {
+                it.copy(activeHudPreset = 2, hudLayoutPreset2 = layout)
+            } else {
+                it.copy(activeHudPreset = 1, hudLayoutPreset1 = layout)
+            }
+        }
+    }
+
+    fun resetHudLayout(preset: Int) {
+        soundEngine.playUiClick()
+        val defaults = defaultHudLayout()
+        updateSettings {
+            if (preset == 2) it.copy(hudLayoutPreset2 = defaults) else it.copy(hudLayoutPreset1 = defaults)
+        }
+    }
+
     fun startMatch(mode: GameMode) {
         soundEngine.playUiClick()
         simJob?.cancel()
@@ -153,7 +194,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         matchResultRecorded = true
         viewModelScope.launch {
             repository.recordMatchResult(
+                modeName = summary.mode.badge,
                 kills = summary.kills,
+                damage = summary.damageDealt,
                 won = summary.victory,
                 goldEarned = summary.goldEarned,
                 rankDelta = summary.rankDelta
@@ -211,6 +254,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleScope() {
         val current = _arenaState.value ?: return
         _arenaState.value = arenaEngine.togglePlayerScope(current)
+    }
+
+    fun jump() {
+        val current = _arenaState.value ?: return
+        _arenaState.value = arenaEngine.jumpPlayer(current)
+    }
+
+    fun toggleCrouch() {
+        val current = _arenaState.value ?: return
+        _arenaState.value = arenaEngine.togglePlayerCrouch(current)
+    }
+
+    fun toggleSprint() {
+        val current = _arenaState.value ?: return
+        _arenaState.value = arenaEngine.togglePlayerSprint(current)
     }
 
     fun switchWeapon() {

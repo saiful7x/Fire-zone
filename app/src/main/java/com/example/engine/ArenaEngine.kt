@@ -569,7 +569,21 @@ class ArenaEngine(
                     )
                 )
             }
-            CharacterId.KELLY, CharacterId.K_MASTER -> Unit
+            CharacterId.A124 -> {
+                val conv = min(updatedActor.ep, 45f)
+                updatedActor = updatedActor.copy(
+                    ep = (updatedActor.ep - conv).coerceAtLeast(0f),
+                    hp = min(updatedActor.maxHp, updatedActor.hp + conv)
+                )
+            }
+            CharacterId.FORD -> {
+                updatedActor = updatedActor.copy(
+                    hp = min(updatedActor.maxHp, updatedActor.hp + 25f),
+                    armor = min(100f, updatedActor.armor + 25f)
+                )
+            }
+            CharacterId.KELLY, CharacterId.K_MASTER, CharacterId.MOCO,
+            CharacterId.RAFAEL, CharacterId.ALVARO, CharacterId.NIKITA -> Unit
         }
 
         if (actor.isPlayer) soundEngine.playSkillActivate()
@@ -585,7 +599,38 @@ class ArenaEngine(
     fun togglePlayerScope(state: ArenaState): ArenaState {
         val player = state.player ?: return state
         return state.copy(
-            combatants = state.combatants.map { if (it.isPlayer) it.copy(isScoped = !it.isScoped) else it }
+            combatants = state.combatants.map { if (it.isPlayer) it.copy(isScoped = !it.isScoped, isSprinting = false) else it }
+        )
+    }
+
+    fun jumpPlayer(state: ArenaState): ArenaState {
+        if (state.phase != MatchPhase.ACTIVE_COMBAT) return state
+        val player = state.player ?: return state
+        if (!player.isAlive || player.dropState != DropState.GROUNDED || player.jumpHeightMeters > 0.05f) return state
+        return state.copy(
+            combatants = state.combatants.map {
+                if (it.isPlayer) it.copy(jumpVelocity = 6.8f, isCrouching = false) else it
+            }
+        )
+    }
+
+    fun togglePlayerCrouch(state: ArenaState): ArenaState {
+        val player = state.player ?: return state
+        if (player.dropState != DropState.GROUNDED) return state
+        return state.copy(
+            combatants = state.combatants.map {
+                if (it.isPlayer) it.copy(isCrouching = !it.isCrouching, isSprinting = false) else it
+            }
+        )
+    }
+
+    fun togglePlayerSprint(state: ArenaState): ArenaState {
+        val player = state.player ?: return state
+        if (player.dropState != DropState.GROUNDED) return state
+        return state.copy(
+            combatants = state.combatants.map {
+                if (it.isPlayer) it.copy(isSprinting = !it.isSprinting, isCrouching = false, isScoped = false) else it
+            }
         )
     }
 
@@ -607,9 +652,10 @@ class ArenaEngine(
         if (player.reloadSecLeft > 0f || player.activeAmmoInMag >= w.magSize || player.reserveAmmo <= 0) {
             return state
         }
+        val reloadMult = if (player.characterId == CharacterId.NIKITA) 0.65f else 1.0f
         return state.copy(
             combatants = state.combatants.map {
-                if (it.isPlayer) it.copy(reloadSecLeft = w.reloadMs / 1000f) else it
+                if (it.isPlayer) it.copy(reloadSecLeft = (w.reloadMs / 1000f) * reloadMult) else it
             }
         )
     }
@@ -856,13 +902,27 @@ class ArenaEngine(
                 }
             }
 
-            // Blue Zone Damage
+            // Blue Zone Damage (Ford takes 35% less zone damage)
             val distToZone = hypot(c.x - sz.centerX, c.y - sz.centerY)
             if (distToZone > sz.currentRadius) {
-                newHp -= sz.damagePerSec * clampedDt
+                val zoneMult = if (c.characterId == CharacterId.FORD) 0.65f else 1.0f
+                newHp -= sz.damagePerSec * zoneMult * clampedDt
+            }
+
+            // Jump vertical arc
+            var nextJumpH = c.jumpHeightMeters
+            var nextJumpV = c.jumpVelocity
+            if (nextJumpH > 0f || nextJumpV > 0f) {
+                nextJumpH += nextJumpV * clampedDt
+                nextJumpV -= 18.5f * clampedDt
+                if (nextJumpH <= 0f) {
+                    nextJumpH = 0f
+                    nextJumpV = 0f
+                }
             }
 
             val bush = if (c.characterId == CharacterId.WUKONG && newSkillActive > 0f) c.isBushDisguised else false
+            val nextMarked = (c.markedSec - clampedDt).coerceAtLeast(0f)
 
             c = c.copy(
                 hp = newHp,
@@ -878,6 +938,9 @@ class ArenaEngine(
                 reserveAmmo = reserve,
                 medkits = medkits,
                 medkitChannelSec = medChannel,
+                jumpHeightMeters = nextJumpH,
+                jumpVelocity = nextJumpV,
+                markedSec = nextMarked,
                 isBushDisguised = bush
             )
 
@@ -902,6 +965,8 @@ class ArenaEngine(
             var speed = 175f
             if (c.characterId == CharacterId.KELLY) speed *= 1.16f
             if (inAlokAura) speed *= 1.18f
+            if (c.isSprinting) speed *= 1.22f
+            if (c.isCrouching) speed *= 0.68f
             if (c.isScoped) speed *= 0.65f
             if (c.medkitChannelSec > 0f) speed *= 0.45f
 
@@ -962,13 +1027,15 @@ class ArenaEngine(
             }
 
             if (c.isPlayer) {
-                // Camera/Aim-relative 3D Third-Person Movement
-                val mag = hypot(moveX, moveY)
+                // Camera/Aim-relative 3D Third-Person Movement (supports Sprint lock)
+                val effMoveX = moveX
+                val effMoveY = if (hypot(moveX, moveY) <= 0.05f && c.isSprinting) -1.0f else moveY
+                val mag = hypot(effMoveX, effMoveY)
                 var nx = c.x
                 var ny = c.y
                 if (mag > 0.05f) {
-                    val forward = -moveY
-                    val strafe = moveX
+                    val forward = -effMoveY
+                    val strafe = effMoveX
                     val wx = cos(c.aimAngle) * forward - sin(c.aimAngle) * strafe
                     val wy = sin(c.aimAngle) * forward + cos(c.aimAngle) * strafe
                     val wLen = hypot(wx, wy).coerceAtLeast(1f)
@@ -987,7 +1054,8 @@ class ArenaEngine(
                         c = fired
                         soundEngine.playWeaponShot(c.activeWeapon)
                     } else if (settings.quickReload && c.reserveAmmo > 0) {
-                        c = c.copy(reloadSecLeft = c.activeWeapon.reloadMs / 1000f)
+                        val reloadMult = if (c.characterId == CharacterId.NIKITA) 0.65f else 1.0f
+                        c = c.copy(reloadSecLeft = (c.activeWeapon.reloadMs / 1000f) * reloadMult)
                     }
                 }
             } else {
@@ -1083,12 +1151,14 @@ class ArenaEngine(
             }
             if (hitObs) continue
 
-            // Gloo Wall collision
+            // Gloo Wall collision (Alvaro deals 2x damage to Gloo Walls)
             var blockedByGloo = false
+            val ownerForGloo = mutableCombatants.firstOrNull { it.id == b.ownerId }
+            val glooDmgMult = if (ownerForGloo?.characterId == CharacterId.ALVARO) 2 else 1
             for (gIdx in mutableGlooWalls.indices) {
                 val gw = mutableGlooWalls[gIdx]
                 if (pointCollidesGlooWall(nextX, nextY, 5f, gw)) {
-                    val newGwHp = gw.hp - b.damage
+                    val newGwHp = gw.hp - b.damage * glooDmgMult
                     mutableGlooWalls[gIdx] = gw.copy(hp = newGwHp)
                     blockedByGloo = true
                     if (newGwHp <= 0) {
@@ -1116,10 +1186,20 @@ class ArenaEngine(
                     val isHeadshot = Random.nextFloat() < b.headshotChance
                     var rawDmg = if (isHeadshot) (b.damage * b.headshotMultiplier).toInt() else b.damage
 
-                    // Kelly burst bonus
+                    // Character damage bonuses
                     val ownerIdx = mutableCombatants.indexOfFirst { it.id == b.ownerId }
-                    if (ownerIdx >= 0 && mutableCombatants[ownerIdx].characterId == CharacterId.KELLY && mutableCombatants[ownerIdx].skillActiveSec > 0f) {
+                    val ownerChar = if (ownerIdx >= 0) mutableCombatants[ownerIdx].characterId else null
+                    val ownerActive = ownerIdx >= 0 && mutableCombatants[ownerIdx].skillActiveSec > 0f
+                    if (ownerChar == CharacterId.KELLY && ownerActive) {
                         rawDmg = (rawDmg * 1.25f).toInt()
+                    } else if (ownerChar == CharacterId.MOCO && isHeadshot) {
+                        rawDmg = (rawDmg * 1.12f).toInt()
+                    } else if (ownerChar == CharacterId.RAFAEL) {
+                        rawDmg = (rawDmg * 1.15f).toInt()
+                    } else if (ownerChar == CharacterId.ALVARO) {
+                        rawDmg = (rawDmg * 1.18f).toInt()
+                    } else if (ownerChar == CharacterId.NIKITA) {
+                        rawDmg = (rawDmg * 1.15f).toInt()
                     }
 
                     // Armor / Helmet reduction
@@ -1139,10 +1219,12 @@ class ArenaEngine(
 
                     val newTargetHp = (target.hp - reducedDmg).coerceAtLeast(0f)
                     val died = newTargetHp <= 0f
+                    val markDur = if (ownerChar == CharacterId.MOCO && !died) 6f else target.markedSec
                     mutableCombatants[cIdx] = target.copy(
                         hp = newTargetHp,
                         armor = newArmor,
                         helmet = newHelmet,
+                        markedSec = markDur,
                         isAlive = !died
                     )
 
@@ -1323,7 +1405,7 @@ class ArenaEngine(
             }
         }
 
-        val scopeSpreadMult = if (shooter.isScoped) 0.42f else 1f
+        val scopeSpreadMult = (if (shooter.isScoped) 0.42f else 1f) * (if (shooter.isCrouching) 0.65f else 1f)
         val hsChance = (if (shooter.isScoped) 0.32f else 0.18f) + (if (weapon == WeaponId.DESERT_EAGLE || weapon == WeaponId.AWM) 0.12f else 0f)
 
         repeat(weapon.pellets) {
@@ -1351,6 +1433,7 @@ class ArenaEngine(
 
         val newAmmo1 = if (shooter.activeSlot == 0) (shooter.ammoInMag1 - 1).coerceAtLeast(0) else shooter.ammoInMag1
         val newAmmo2 = if (shooter.activeSlot == 1) (shooter.ammoInMag2 - 1).coerceAtLeast(0) else shooter.ammoInMag2
+        val noiseDuration = if (shooter.characterId == CharacterId.RAFAEL) 0f else 1.6f
 
         return shooter.copy(
             aimAngle = aimAngle,
@@ -1359,7 +1442,7 @@ class ArenaEngine(
             fireCooldownSec = weapon.fireIntervalMs / 1000f,
             muzzleFlashSec = 0.08f,
             isBushDisguised = false,
-            lastShotNoiseSec = 1.6f
+            lastShotNoiseSec = noiseDuration
         )
     }
 
@@ -1674,24 +1757,30 @@ class ArenaEngine(
     }
 
     private fun generateClashSquadObstacles(mapW: Float, mapH: Float): List<MapObstacle> {
+        // Hangar warehouse layout inspired by screenshot #2: blue/orange shipping containers, green vans & center cover
         return listOf(
-            MapObstacle(allocId(), mapW * 0.46f, mapH * 0.42f, 110f, 150f, ObstacleType.BUILDING),
-            MapObstacle(allocId(), mapW * 0.32f, mapH * 0.22f, 80f, 90f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.62f, mapH * 0.22f, 80f, 90f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.32f, mapH * 0.68f, 80f, 90f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.62f, mapH * 0.68f, 80f, 90f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.22f, mapH * 0.46f, 60f, 70f, ObstacleType.ROCK),
-            MapObstacle(allocId(), mapW * 0.74f, mapH * 0.46f, 60f, 70f, ObstacleType.ROCK)
+            MapObstacle(allocId(), mapW * 0.25f, mapH * 0.18f, 115f, 52f, ObstacleType.CONTAINER_RED),
+            MapObstacle(allocId(), mapW * 0.65f, mapH * 0.18f, 115f, 52f, ObstacleType.CONTAINER_RED),
+            MapObstacle(allocId(), mapW * 0.25f, mapH * 0.74f, 115f, 52f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.65f, mapH * 0.74f, 115f, 52f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.45f, mapH * 0.28f, 92f, 44f, ObstacleType.VAN),
+            MapObstacle(allocId(), mapW * 0.45f, mapH * 0.66f, 92f, 44f, ObstacleType.VAN),
+            MapObstacle(allocId(), mapW * 0.46f, mapH * 0.44f, 100f, 115f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.34f, mapH * 0.46f, 65f, 65f, ObstacleType.CRATE),
+            MapObstacle(allocId(), mapW * 0.60f, mapH * 0.46f, 65f, 65f, ObstacleType.CRATE)
         )
     }
 
     private fun generateLoneWolfObstacles(mapW: Float, mapH: Float): List<MapObstacle> {
+        // Iron Cage Container Warehouse duel layout matching screenshot #2
         return listOf(
-            MapObstacle(allocId(), mapW * 0.46f, mapH * 0.44f, 76f, 90f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.30f, mapH * 0.24f, 64f, 64f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.64f, mapH * 0.24f, 64f, 64f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.30f, mapH * 0.66f, 64f, 64f, ObstacleType.CRATE),
-            MapObstacle(allocId(), mapW * 0.64f, mapH * 0.66f, 64f, 64f, ObstacleType.CRATE)
+            MapObstacle(allocId(), mapW * 0.44f, mapH * 0.42f, 95f, 54f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.24f, mapH * 0.20f, 105f, 48f, ObstacleType.CONTAINER_RED),
+            MapObstacle(allocId(), mapW * 0.64f, mapH * 0.20f, 105f, 48f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.24f, mapH * 0.72f, 105f, 48f, ObstacleType.CONTAINER_BLUE),
+            MapObstacle(allocId(), mapW * 0.64f, mapH * 0.72f, 105f, 48f, ObstacleType.CONTAINER_RED),
+            MapObstacle(allocId(), mapW * 0.44f, mapH * 0.24f, 84f, 42f, ObstacleType.VAN),
+            MapObstacle(allocId(), mapW * 0.44f, mapH * 0.68f, 84f, 42f, ObstacleType.VAN)
         )
     }
 

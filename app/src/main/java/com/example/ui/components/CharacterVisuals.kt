@@ -13,8 +13,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -74,7 +81,6 @@ fun CharacterPortrait(
                 contentScale = ContentScale.Crop
             )
         } else {
-            // Crisp custom tactical vector portrait badge for Wukong, Kelly, and K
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
@@ -85,7 +91,6 @@ fun CharacterPortrait(
                         radius = w * 0.65f
                     )
                 )
-                // Hexagonal tactical emblem
                 val hex = Path().apply {
                     val cx = w * 0.5f
                     val cy = h * 0.44f
@@ -104,13 +109,19 @@ fun CharacterPortrait(
             val icon = when (characterId) {
                 CharacterId.WUKONG -> Icons.Filled.Shield
                 CharacterId.KELLY -> Icons.Filled.Bolt
+                CharacterId.MOCO -> Icons.Filled.Visibility
+                CharacterId.RAFAEL -> Icons.Filled.CenterFocusStrong
+                CharacterId.A124 -> Icons.Filled.Memory
+                CharacterId.ALVARO -> Icons.Filled.LocalFireDepartment
+                CharacterId.NIKITA -> Icons.Filled.Speed
+                CharacterId.FORD -> Icons.Filled.Security
                 else -> Icons.Filled.Stars
             }
             Icon(
                 imageVector = icon,
                 contentDescription = "${characterId.displayName} emblem",
                 tint = characterId.accentColor,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(34.dp)
             )
         }
 
