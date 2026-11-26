@@ -11,9 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.engine.ArenaState
 import com.example.engine.DropState
-import com.example.engine.LootType
 import com.example.engine.ObstacleType
 import com.google.android.filament.Camera
+import com.google.android.filament.ColorGrading
 import com.google.android.filament.Engine
 import com.google.android.filament.EntityManager
 import com.google.android.filament.IndirectLight
@@ -69,8 +69,10 @@ private class Arena3DController {
     private val cameraEntity: Int = EntityManager.get().create()
     private val camera: Camera = engine.createCamera(cameraEntity)
     private val sunEntity: Int = EntityManager.get().create()
+    private val fillLightEntity: Int = EntityManager.get().create()
     private val skybox: Skybox
     private val indirectLight: IndirectLight
+    private val colorGrading: ColorGrading
 
     private val materials = FilamentMaterialBank(engine)
     private val meshes = FilamentMeshBank(engine)
@@ -78,7 +80,6 @@ private class Arena3DController {
     private val staticEntities = mutableListOf<Int>()
     private var builtMapKey: String = ""
 
-    // Dynamic entity pools
     private val characterRigs = mutableMapOf<Int, FilamentCharacterRig>()
     private val glooPool = mutableListOf<Int>()
     private val bulletPool = mutableListOf<Int>()
@@ -87,7 +88,6 @@ private class Arena3DController {
     private val auraPool = mutableListOf<Int>()
     private val zoneRingSegments = mutableListOf<Int>()
 
-    // 3D C-130 Cargo Plane parts
     private val planeRoot: Int = EntityManager.get().create()
     private val planeParts = mutableListOf<Int>()
     private var planeVisible = false
@@ -95,8 +95,6 @@ private class Arena3DController {
     private val glooWallMat: MaterialInstance
     private val bulletMat: MaterialInstance
     private val weaponLootMat: MaterialInstance
-    private val glooLootMat: MaterialInstance
-    private val medLootMat: MaterialInstance
     private val chronoMat: MaterialInstance
     private val alokMat: MaterialInstance
     private val zoneMat: MaterialInstance
@@ -111,38 +109,46 @@ private class Arena3DController {
     init {
         view.scene = scene
         view.camera = camera
+        colorGrading = FilamentPostProcess.configureView(engine, view, enableFog = true)
 
         skybox = Skybox.Builder()
-            .color(0.28f, 0.45f, 0.68f, 1.0f)
+            .color(0.36f, 0.56f, 0.80f, 1.0f)
             .build(engine)
         scene.skybox = skybox
 
         val shBands = floatArrayOf(
-            0.65f, 0.68f, 0.72f,
-            0.0f, 0.1f, 0.1f,
+            0.78f, 0.82f, 0.88f,
+            0.05f, 0.14f, 0.20f,
             0.0f, 0.0f, 0.0f
         )
         indirectLight = IndirectLight.Builder()
             .irradiance(1, shBands)
-            .intensity(32000f)
+            .intensity(38000f)
             .build(engine)
         scene.indirectLight = indirectLight
 
         LightManager.Builder(LightManager.Type.DIRECTIONAL)
             .color(1.0f, 0.94f, 0.84f)
-            .intensity(120000f)
-            .direction(-0.45f, -0.82f, -0.35f)
+            .intensity(125000f)
+            .direction(-0.42f, -0.82f, -0.38f)
             .castShadows(true)
             .build(engine, sunEntity)
         scene.addEntity(sunEntity)
 
-        glooWallMat = materials.transparent(0.0f, 0.88f, 1.0f, 0.62f)
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .color(0.55f, 0.78f, 1.0f)
+            .intensity(34000f)
+            .direction(0.52f, -0.35f, 0.65f)
+            .castShadows(false)
+            .build(engine, fillLightEntity)
+        scene.addEntity(fillLightEntity)
+
+        val tex = materials.textures
+        glooWallMat = materials.texturedTransparent(tex.glooHexMap, r = 0.25f, g = 0.92f, b = 1.0f, a = 0.72f, uvScaleX = 2.5f, uvScaleY = 2f)
         bulletMat = materials.lit(0xFFFFCA28, metallic = 0.2f, roughness = 0.3f, emissiveR = 1.0f, emissiveG = 0.8f, emissiveB = 0.1f)
-        weaponLootMat = materials.lit(0xFFFFB300, metallic = 0.5f, roughness = 0.3f, emissiveR = 0.8f, emissiveG = 0.5f, emissiveB = 0f)
-        glooLootMat = materials.lit(0xFF00E5FF, metallic = 0.4f, roughness = 0.3f, emissiveR = 0f, emissiveG = 0.7f, emissiveB = 0.9f)
-        medLootMat = materials.lit(0xFF00E676, metallic = 0.2f, roughness = 0.4f, emissiveR = 0f, emissiveG = 0.8f, emissiveB = 0.3f)
-        chronoMat = materials.transparent(0.0f, 0.85f, 1.0f, 0.32f)
-        alokMat = materials.transparent(1.0f, 0.72f, 0.0f, 0.34f)
+        weaponLootMat = materials.textured(tex.woodCrateMap, tintArgb = 0xFFFFD54F, metallic = 0.35f, roughness = 0.4f, emissiveR = 0.55f, emissiveG = 0.35f, emissiveB = 0f)
+        chronoMat = materials.transparent(0.0f, 0.85f, 1.0f, 0.30f)
+        alokMat = materials.transparent(1.0f, 0.72f, 0.0f, 0.32f)
         zoneMat = materials.transparent(0.18f, 0.56f, 1.0f, 0.32f)
 
         buildC130Airplane()
@@ -152,10 +158,12 @@ private class Arena3DController {
         val tm = engine.transformManager
         tm.create(planeRoot)
         val rootTi = tm.getInstance(planeRoot)
+        val tex = materials.textures
 
-        val bodyMat = materials.lit(0xFF455A64, metallic = 0.65f, roughness = 0.38f)
-        val wingMat = materials.lit(0xFF607D8B, metallic = 0.6f, roughness = 0.42f)
+        val bodyMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF546E7A, metallic = 0.65f, roughness = 0.38f, uvScaleX = 2f, uvScaleY = 4f)
+        val wingMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF78909C, metallic = 0.6f, roughness = 0.42f, uvScaleX = 3f, uvScaleY = 1f)
         val accentMat = materials.lit(0xFFFF6D00, metallic = 0.4f, roughness = 0.4f, emissiveR = 0.6f, emissiveG = 0.2f, emissiveB = 0f)
+        val glassMat = materials.lit(0xFF1A3A4A, metallic = 0.9f, roughness = 0.12f)
 
         fun part(mesh: FilamentMesh, mat: MaterialInstance, tx: Float, ty: Float, tz: Float, sx: Float, sy: Float, sz: Float, rx: Float = 0f): Int {
             val e = FilamentTransformHelper.spawnMeshEntity(engine, mesh, mat, castShadows = true)
@@ -165,18 +173,14 @@ private class Arena3DController {
             return e
         }
 
-        // Fuselage along +Z
-        part(meshes.cylinder, bodyMat, 0f, 0f, 0f, 2.2f, 13f, 2.2f, rx = 90f)
-        // Nose cone
-        part(meshes.sphere, accentMat, 0f, 0f, 6.4f, 2.0f, 1.8f, 2.4f)
-        // Main swept wings
-        part(meshes.box, wingMat, 0f, 0.55f, 0.8f, 16.5f, 0.28f, 3.0f)
-        // Tail vertical stabilizer & horizontal stabilizers
-        part(meshes.box, accentMat, 0f, 1.9f, -5.4f, 0.32f, 3.0f, 2.2f)
-        part(meshes.box, wingMat, 0f, 0.45f, -5.5f, 6.2f, 0.22f, 1.5f)
-        // 4 Turbofan engines
+        part(meshes.cylinder, bodyMat, 0f, 0f, 0f, 2.3f, 13.5f, 2.3f, rx = 90f)
+        part(meshes.sphere, accentMat, 0f, 0f, 6.6f, 2.0f, 1.8f, 2.4f)
+        part(meshes.box, glassMat, 0f, 0.6f, 5.7f, 1.35f, 0.55f, 0.9f)
+        part(meshes.box, wingMat, 0f, 0.55f, 0.8f, 17.0f, 0.28f, 3.1f)
+        part(meshes.box, accentMat, 0f, 1.95f, -5.6f, 0.32f, 3.1f, 2.2f)
+        part(meshes.box, wingMat, 0f, 0.45f, -5.6f, 6.4f, 0.22f, 1.5f)
         listOf(-5.2f, -2.8f, 2.8f, 5.2f).forEach { ex ->
-            part(meshes.cylinder, accentMat, ex, 0.1f, 2.1f, 0.72f, 1.9f, 0.72f, rx = 90f)
+            part(meshes.cylinder, accentMat, ex, 0.1f, 2.1f, 0.75f, 1.95f, 0.75f, rx = 90f)
         }
     }
 
@@ -192,30 +196,46 @@ private class Arena3DController {
         staticEntities.clear()
 
         val tm = engine.transformManager
+        val tex = materials.textures
         val mapW3D = state.mapWidth * WORLD_SCALE
         val mapH3D = state.mapHeight * WORLD_SCALE
+        val isWarehouse = state.mode.name == "LONE_WOLF" || state.mode.name == "CLASH_SQUAD"
+
+        // Adjust atmospheric fog depending on indoor warehouse vs outdoor Bermuda island
+        view.setFogOptions(
+            View.FogOptions().apply {
+                enabled = !isWarehouse
+                distance = 24f
+                cutOffDistance = 320f
+                maximumOpacity = 0.62f
+                density = 0.12f
+                height = 18f
+                heightFalloff = 0.45f
+                color = floatArrayOf(0.56f, 0.73f, 0.90f)
+            }
+        )
 
         // Ocean surround
-        val oceanMat = materials.lit(0xFF0E3C5C, metallic = 0.3f, roughness = 0.22f)
+        val oceanMat = materials.lit(0xFF144B6E, metallic = 0.35f, roughness = 0.20f)
         val ocean = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, oceanMat, castShadows = false)
-        tm.setTransform(tm.getInstance(ocean), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, -1.2f, mapH3D * 0.5f, sx = mapW3D + 220f, sy = 1f, sz = mapH3D + 220f))
-        scene.addEntity(ocean)
-        staticEntities.add(ocean)
+        tm.setTransform(tm.getInstance(ocean), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, -1.25f, mapH3D * 0.5f, sx = mapW3D + 260f, sy = 1f, sz = mapH3D + 260f))
+        scene.addEntity(ocean); staticEntities.add(ocean)
 
-        // Island / Warehouse ground terrain
-        val isWarehouse = state.mode.name == "LONE_WOLF" || state.mode.name == "CLASH_SQUAD"
-        val groundColor = if (isWarehouse) 0xFF474B52 else 0xFF5A6D3A
-        val groundMat = materials.lit(groundColor, metallic = 0.04f, roughness = 0.88f)
+        // Textured Ground (Warehouse Concrete Slabs vs Bermuda Tiled Grass)
+        val groundMat = if (isWarehouse) {
+            materials.textured(tex.warehouseFloorMap, tintArgb = 0xFFFFFFFF, metallic = 0.08f, roughness = 0.78f, uvScaleX = 16f, uvScaleY = 12f)
+        } else {
+            materials.textured(tex.bermudaGrassMap, tintArgb = 0xFFFFFFFF, metallic = 0.0f, roughness = 0.92f, uvScaleX = 28f, uvScaleY = 28f)
+        }
         val ground = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, groundMat, castShadows = false)
         tm.setTransform(tm.getInstance(ground), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, -0.5f, mapH3D * 0.5f, sx = mapW3D, sy = 1f, sz = mapH3D))
-        scene.addEntity(ground)
-        staticEntities.add(ground)
+        scene.addEntity(ground); staticEntities.add(ground)
 
         if (isWarehouse) {
             // Corrugated steel warehouse perimeter walls (Screenshot #2)
-            val hangarWallMat = materials.lit(0xFF636870, metallic = 0.45f, roughness = 0.58f)
-            val pillarMat = materials.lit(0xFF4A372B, metallic = 0.35f, roughness = 0.65f)
-            val wallH = 11f
+            val hangarWallMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF8C949E, metallic = 0.48f, roughness = 0.54f, uvScaleX = 12f, uvScaleY = 2f)
+            val pillarMat = materials.lit(0xFF4A372B, metallic = 0.38f, roughness = 0.62f)
+            val wallH = 11.5f
             listOf(
                 FilamentTransformHelper.buildTRS(mapW3D * 0.5f, wallH * 0.5f, -0.8f, sx = mapW3D + 2f, sy = wallH, sz = 1.6f),
                 FilamentTransformHelper.buildTRS(mapW3D * 0.5f, wallH * 0.5f, mapH3D + 0.8f, sx = mapW3D + 2f, sy = wallH, sz = 1.6f),
@@ -227,25 +247,25 @@ private class Arena3DController {
                 scene.addEntity(w); staticEntities.add(w)
             }
 
-            // Caution yellow lane stripes & spawn floor pads (Screenshot #2)
-            val cautionMat = materials.lit(0xFFE6B800, metallic = 0.1f, roughness = 0.72f)
-            val lane = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, cautionMat, castShadows = false)
-            tm.setTransform(tm.getInstance(lane), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.015f, mapH3D * 0.5f, sx = mapW3D * 0.88f, sy = 0.03f, sz = 0.55f))
+            // Textured Caution Hazard Pads & Center Lane (Screenshot #2)
+            val hazardMat = materials.textured(tex.hazardPadMap, tintArgb = 0xFFFFFFFF, metallic = 0.1f, roughness = 0.72f)
+            val laneMat = materials.textured(tex.hazardPadMap, tintArgb = 0xFFFFFFFF, metallic = 0.1f, roughness = 0.72f, uvScaleX = 18f, uvScaleY = 1f)
+            val lane = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, laneMat, castShadows = false)
+            tm.setTransform(tm.getInstance(lane), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.015f, mapH3D * 0.5f, sx = mapW3D * 0.88f, sy = 0.03f, sz = 0.62f))
             scene.addEntity(lane); staticEntities.add(lane)
 
-            val padPositions = listOf(
+            listOf(
                 6.5f to mapH3D * 0.25f,
                 6.5f to mapH3D * 0.75f,
                 mapW3D - 6.5f to mapH3D * 0.25f,
                 mapW3D - 6.5f to mapH3D * 0.75f
-            )
-            padPositions.forEach { (px, pz) ->
-                val pad = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, cautionMat, castShadows = false)
+            ).forEach { (px, pz) ->
+                val pad = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, hazardMat, castShadows = false)
                 tm.setTransform(tm.getInstance(pad), FilamentTransformHelper.buildTRS(px, 0.02f, pz, sx = 6.5f, sy = 0.04f, sz = 5.5f))
                 scene.addEntity(pad); staticEntities.add(pad)
             }
 
-            // Glowing Red & Cyan Spawn Portal Gates (Screenshot #2)
+            // Glowing Red & Cyan Spawn Portal Gates
             val redGateMat = materials.lit(0xFFFF1744, metallic = 0.2f, roughness = 0.2f, emissiveR = 1.0f, emissiveG = 0.12f, emissiveB = 0.16f)
             val cyanGateMat = materials.lit(0xFF00E5FF, metallic = 0.2f, roughness = 0.2f, emissiveR = 0.05f, emissiveG = 0.85f, emissiveB = 1.0f)
             val gateAlly = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, cyanGateMat, castShadows = false)
@@ -256,7 +276,6 @@ private class Arena3DController {
             tm.setTransform(tm.getInstance(gateEnemy), FilamentTransformHelper.buildTRS(mapW3D - 2.2f, 2.2f, mapH3D * 0.5f, sx = 0.45f, sy = 4.4f, sz = 6.2f))
             scene.addEntity(gateEnemy); staticEntities.add(gateEnemy)
 
-            // Structural steel pillars along hangar walls
             for (k in 1..4) {
                 val px = mapW3D * (k / 5f)
                 listOf(0.8f, mapH3D - 0.8f).forEach { pz ->
@@ -266,40 +285,41 @@ private class Arena3DController {
                 }
             }
         } else {
-            // Bermuda Island roads & distant mountain ridges (Screenshot #4)
-            val roadMat = materials.lit(0xFF3E4246, metallic = 0.04f, roughness = 0.88f)
-            val road1 = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, roadMat, castShadows = false)
-            tm.setTransform(tm.getInstance(road1), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.01f, mapH3D * 0.5f, sx = mapW3D * 0.92f, sy = 0.04f, sz = 4.5f))
+            // Bermuda Asphalt Highway Roads + Distant Mountain Ridges (Screenshot #4)
+            val roadMatH = materials.textured(tex.asphaltRoadMap, tintArgb = 0xFFFFFFFF, metallic = 0.04f, roughness = 0.86f, uvScaleX = 18f, uvScaleY = 1f)
+            val roadMatV = materials.textured(tex.asphaltRoadMap, tintArgb = 0xFFFFFFFF, metallic = 0.04f, roughness = 0.86f, uvScaleX = 1f, uvScaleY = 18f)
+            val road1 = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, roadMatH, castShadows = false)
+            tm.setTransform(tm.getInstance(road1), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.015f, mapH3D * 0.5f, sx = mapW3D * 0.94f, sy = 0.04f, sz = 4.6f))
             scene.addEntity(road1); staticEntities.add(road1)
 
-            val road2 = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, roadMat, castShadows = false)
-            tm.setTransform(tm.getInstance(road2), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.015f, mapH3D * 0.5f, sx = 4.5f, sy = 0.04f, sz = mapH3D * 0.92f))
+            val road2 = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, roadMatV, castShadows = false)
+            tm.setTransform(tm.getInstance(road2), FilamentTransformHelper.buildTRS(mapW3D * 0.5f, 0.020f, mapH3D * 0.5f, sx = 4.6f, sy = 0.04f, sz = mapH3D * 0.94f))
             scene.addEntity(road2); staticEntities.add(road2)
 
-            val ridgeMat = materials.lit(0xFF4A6B7C, metallic = 0.02f, roughness = 0.95f)
+            val ridgeMat = materials.textured(tex.bermudaGrassMap, tintArgb = 0xFF6B8A72, metallic = 0.0f, roughness = 0.95f, uvScaleX = 4f, uvScaleY = 4f)
             listOf(
-                Triple(mapW3D * 0.25f, -18f, 52f),
-                Triple(mapW3D * 0.72f, -20f, 60f),
-                Triple(mapW3D + 18f, mapH3D * 0.45f, 56f),
-                Triple(-18f, mapH3D * 0.6f, 48f)
+                Triple(mapW3D * 0.22f, -22f, 58f),
+                Triple(mapW3D * 0.74f, -24f, 66f),
+                Triple(mapW3D + 22f, mapH3D * 0.42f, 62f),
+                Triple(-22f, mapH3D * 0.58f, 54f)
             ).forEach { (mx, mz, scale) ->
                 val peak = FilamentTransformHelper.spawnMeshEntity(engine, meshes.sphere, ridgeMat, castShadows = false)
-                tm.setTransform(tm.getInstance(peak), FilamentTransformHelper.buildTRS(mx, scale * 0.16f, mz, sx = scale, sy = scale * 0.48f, sz = scale))
+                tm.setTransform(tm.getInstance(peak), FilamentTransformHelper.buildTRS(mx, scale * 0.16f, mz, sx = scale, sy = scale * 0.52f, sz = scale))
                 scene.addEntity(peak); staticEntities.add(peak)
             }
         }
 
-        // Obstacles in 3D
-        val buildingMat = materials.lit(0xFF566376, metallic = 0.12f, roughness = 0.78f)
-        val roofMat = materials.lit(0xFF8C3B2B, metallic = 0.1f, roughness = 0.7f)
-        val crateMat = materials.lit(0xFF8D623F, metallic = 0.05f, roughness = 0.82f)
-        val rockMat = materials.lit(0xFF606E78, metallic = 0.05f, roughness = 0.92f)
-        val trunkMat = materials.lit(0xFF5D4037, metallic = 0.0f, roughness = 0.95f)
-        val leafMat = materials.lit(0xFF2E6B2E, metallic = 0.0f, roughness = 0.85f)
-        val blueContainerMat = materials.lit(0xFF2A5B84, metallic = 0.42f, roughness = 0.48f)
-        val redContainerMat = materials.lit(0xFFB5492B, metallic = 0.40f, roughness = 0.50f)
-        val vanBodyMat = materials.lit(0xFF4F7B64, metallic = 0.35f, roughness = 0.45f)
-        val vanCabinMat = materials.lit(0xFFE6E4D8, metallic = 0.25f, roughness = 0.40f)
+        // Textured World Obstacles
+        val buildingMat = materials.textured(tex.buildingFacadeMap, tintArgb = 0xFFFFFFFF, metallic = 0.05f, roughness = 0.78f, uvScaleX = 2f, uvScaleY = 2f)
+        val roofMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF9E4432, metallic = 0.15f, roughness = 0.72f, uvScaleX = 3f, uvScaleY = 3f)
+        val crateMat = materials.textured(tex.woodCrateMap, tintArgb = 0xFFFFFFFF, metallic = 0.05f, roughness = 0.80f)
+        val rockMat = materials.textured(tex.warehouseFloorMap, tintArgb = 0xFF7C848A, metallic = 0.02f, roughness = 0.92f)
+        val trunkMat = materials.textured(tex.woodCrateMap, tintArgb = 0xFF5D4037, metallic = 0.0f, roughness = 0.95f)
+        val leafMat = materials.textured(tex.bermudaGrassMap, tintArgb = 0xFF689F38, metallic = 0.0f, roughness = 0.85f, uvScaleX = 2f, uvScaleY = 2f)
+        val blueContainerMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF2D6CA2, metallic = 0.42f, roughness = 0.48f, uvScaleX = 2f, uvScaleY = 1f)
+        val redContainerMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFFC85130, metallic = 0.40f, roughness = 0.50f, uvScaleX = 2f, uvScaleY = 1f)
+        val vanBodyMat = materials.textured(tex.vanBodyMap, tintArgb = 0xFFFFFFFF, metallic = 0.30f, roughness = 0.42f)
+        val vanRoofMat = materials.lit(0xFFEBE8DA, metallic = 0.18f, roughness = 0.45f)
         val wheelMat = materials.lit(0xFF1A1D22, metallic = 0.1f, roughness = 0.85f)
 
         state.obstacles.forEachIndexed { idx, obs ->
@@ -310,13 +330,13 @@ private class Arena3DController {
 
             when (obs.type) {
                 ObstacleType.BUILDING -> {
-                    val h = 5.4f
+                    val h = 5.6f
                     val wall = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, buildingMat)
                     tm.setTransform(tm.getInstance(wall), FilamentTransformHelper.buildTRS(cx, h * 0.5f, cz, sx = w, sy = h, sz = d))
                     scene.addEntity(wall); staticEntities.add(wall)
 
                     val roof = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, roofMat)
-                    tm.setTransform(tm.getInstance(roof), FilamentTransformHelper.buildTRS(cx, h + 0.25f, cz, sx = w + 0.5f, sy = 0.5f, sz = d + 0.5f))
+                    tm.setTransform(tm.getInstance(roof), FilamentTransformHelper.buildTRS(cx, h + 0.25f, cz, sx = w + 0.55f, sy = 0.5f, sz = d + 0.55f))
                     scene.addEntity(roof); staticEntities.add(roof)
                 }
                 ObstacleType.CONTAINER_BLUE, ObstacleType.CONTAINER_RED -> {
@@ -325,7 +345,6 @@ private class Arena3DController {
                     val box = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, cMat)
                     tm.setTransform(tm.getInstance(box), FilamentTransformHelper.buildTRS(cx, h * 0.5f, cz, sx = w, sy = h, sz = d))
                     scene.addEntity(box); staticEntities.add(box)
-                    // Stack second container on side lanes for authentic Screenshot #2 look
                     if (idx % 2 == 0) {
                         val topBox = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, cMat)
                         tm.setTransform(tm.getInstance(topBox), FilamentTransformHelper.buildTRS(cx, h * 1.5f + 0.05f, cz, sx = w * 0.96f, sy = h, sz = d * 0.96f))
@@ -333,18 +352,17 @@ private class Arena3DController {
                     }
                 }
                 ObstacleType.VAN -> {
-                    // Retro green & cream van (Screenshot #2)
-                    val lower = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, vanBodyMat)
-                    tm.setTransform(tm.getInstance(lower), FilamentTransformHelper.buildTRS(cx, 0.85f, cz, sx = w, sy = 1.15f, sz = d))
-                    scene.addEntity(lower); staticEntities.add(lower)
+                    val shell = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, vanBodyMat)
+                    tm.setTransform(tm.getInstance(shell), FilamentTransformHelper.buildTRS(cx, 1.25f, cz, sx = w, sy = 1.90f, sz = d))
+                    scene.addEntity(shell); staticEntities.add(shell)
 
-                    val cabin = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, vanCabinMat)
-                    tm.setTransform(tm.getInstance(cabin), FilamentTransformHelper.buildTRS(cx, 1.78f, cz, sx = w * 0.94f, sy = 0.85f, sz = d * 0.92f))
-                    scene.addEntity(cabin); staticEntities.add(cabin)
+                    val roof = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, vanRoofMat)
+                    tm.setTransform(tm.getInstance(roof), FilamentTransformHelper.buildTRS(cx, 2.24f, cz, sx = w * 0.92f, sy = 0.14f, sz = d * 0.92f))
+                    scene.addEntity(roof); staticEntities.add(roof)
 
                     listOf(-w * 0.34f to -d * 0.48f, w * 0.34f to -d * 0.48f, -w * 0.34f to d * 0.48f, w * 0.34f to d * 0.48f).forEach { (ox, oz) ->
                         val wheel = FilamentTransformHelper.spawnMeshEntity(engine, meshes.cylinder, wheelMat)
-                        tm.setTransform(tm.getInstance(wheel), FilamentTransformHelper.buildTRS(cx + ox, 0.36f, cz + oz, rotXDeg = 90f, sx = 0.72f, sy = 0.25f, sz = 0.72f))
+                        tm.setTransform(tm.getInstance(wheel), FilamentTransformHelper.buildTRS(cx + ox, 0.36f, cz + oz, rotXDeg = 90f, sx = 0.72f, sy = 0.26f, sz = 0.72f))
                         scene.addEntity(wheel); staticEntities.add(wheel)
                     }
                 }
@@ -362,7 +380,7 @@ private class Arena3DController {
                 }
                 ObstacleType.TREE -> {
                     val trunk = FilamentTransformHelper.spawnMeshEntity(engine, meshes.cylinder, trunkMat)
-                    tm.setTransform(tm.getInstance(trunk), FilamentTransformHelper.buildTRS(cx, 1.8f, cz, sx = 0.55f, sy = 3.6f, sz = 0.55f))
+                    tm.setTransform(tm.getInstance(trunk), FilamentTransformHelper.buildTRS(cx, 1.8f, cz, sx = 0.52f, sy = 3.6f, sz = 0.52f))
                     scene.addEntity(trunk); staticEntities.add(trunk)
 
                     val crown1 = FilamentTransformHelper.spawnMeshEntity(engine, meshes.sphere, leafMat)
@@ -425,7 +443,7 @@ private class Arena3DController {
 
         ensureMapBuilt(state)
 
-        // 1. Update 3D C-130 Cargo Airplane
+        // 1. 3D C-130 Cargo Airplane
         val wantPlane = state.plane.active
         if (wantPlane && !planeVisible) {
             planeParts.forEach { scene.addEntity(it) }
@@ -442,7 +460,7 @@ private class Arena3DController {
             tm.setTransform(tm.getInstance(planeRoot), FilamentTransformHelper.buildTRS(px, py, pz, rotYDeg = planeYaw))
         }
 
-        // 2. Update 3D Combatants
+        // 2. 3D Combatants
         val activeIds = HashSet<Int>(state.combatants.size)
         state.combatants.forEach { c ->
             activeIds.add(c.id)
@@ -466,16 +484,16 @@ private class Arena3DController {
                     dropState = c.dropState,
                     isCrouching = c.isCrouching,
                     isSprinting = c.isSprinting,
+                    isLobbyShowcase = false,
                     scale = 1.0f
                 )
             }
         }
-        // Hide rigs no longer in state
         characterRigs.forEach { (id, rig) ->
             if (id !in activeIds) rig.setVisible(false, false)
         }
 
-        // 3. Update 3D Gloo Walls 🧱
+        // 3. Textured Hex Gloo Walls
         syncEntityPool(glooPool, state.glooWalls.size, meshes.box, glooWallMat) { idx, entity ->
             val gw = state.glooWalls[idx]
             val yawDeg = 90f - Math.toDegrees(gw.angleRad.toDouble()).toFloat()
@@ -494,7 +512,7 @@ private class Arena3DController {
             )
         }
 
-        // 4. Update 3D Bullets / Tracers
+        // 4. Bullets / Tracers
         syncEntityPool(bulletPool, state.bullets.size, meshes.sphere, bulletMat) { idx, entity ->
             val b = state.bullets[idx]
             val s = if (b.isSonicWave) 1.5f else 0.28f
@@ -504,7 +522,7 @@ private class Arena3DController {
             )
         }
 
-        // 5. Update 3D Loot Pickups
+        // 5. Loot Crates
         syncEntityPool(lootPool, state.lootDrops.size, meshes.box, weaponLootMat) { idx, entity ->
             val l = state.lootDrops[idx]
             val bob = 0.45f + sin(t * 3.5f + idx) * 0.14f
@@ -522,7 +540,7 @@ private class Arena3DController {
             )
         }
 
-        // 6. Update 3D Chrono Domes & Alok Auras
+        // 6. Chrono Domes & Alok Auras
         syncEntityPool(domePool, state.chronoDomes.size, meshes.sphere, chronoMat) { idx, entity ->
             val d = state.chronoDomes[idx]
             val dia = d.radius * WORLD_SCALE * 2f
@@ -540,7 +558,7 @@ private class Arena3DController {
             )
         }
 
-        // 7. Update 3D Shrinking Blue Zone Boundary Segments (16 wall panels around safe zone)
+        // 7. Blue Zone Boundary Segments
         val segCount = 16
         syncEntityPool(zoneRingSegments, segCount, meshes.box, zoneMat) { idx, entity ->
             val sz = state.safeZone
@@ -556,7 +574,6 @@ private class Arena3DController {
             )
         }
 
-        // 8. Position 3D Third-Person / Flight / Parachute Camera
         updateCamera(state)
 
         if (renderer.beginFrame(sc, frameTimeNanos)) {
@@ -581,7 +598,7 @@ private class Arena3DController {
                 val eyeZ = state.plane.y * WORLD_SCALE - fz * 22.0
                 camera.lookAt(
                     eyeX, eyeY, eyeZ,
-                    state.plane.x * WORLD_SCALE + fx * 10.0, (state.plane.altitudeMeters - 8.0), state.plane.y * WORLD_SCALE + fz * 10.0,
+                    state.plane.x * WORLD_SCALE + fx * 10.0, state.plane.altitudeMeters - 8.0, state.plane.y * WORLD_SCALE + fz * 10.0,
                     0.0, 1.0, 0.0
                 )
             }
@@ -591,30 +608,29 @@ private class Arena3DController {
                 val distBack = if (player.dropState == DropState.PARACHUTE) 9.0 else 7.2
                 val heightUp = if (player.dropState == DropState.PARACHUTE) 4.2 else 5.5
                 camera.lookAt(
-                    (px - fx * distBack).toDouble(), (py + heightUp).toDouble(), (pz - fz * distBack).toDouble(),
-                    (px + fx * 6.0).toDouble(), (py - 2.5).toDouble(), (pz + fz * 6.0).toDouble(),
+                    px - fx * distBack, py + heightUp, pz - fz * distBack,
+                    px + fx * 6.0, py - 2.5, pz + fz * 6.0,
                     0.0, 1.0, 0.0
                 )
             }
             DropState.GROUNDED -> {
                 val fx = cos(player.aimAngle)
                 val fz = sin(player.aimAngle)
-                // Right shoulder offset
                 val rx = -fz
                 val rz = fx
-                val zoomBack = if (player.isScoped) 2.9 else 5.4
+                val zoomBack = if (player.isScoped) 2.85 else 5.15
                 val crouchOffset = if (player.isCrouching) -0.45 else 0.0
-                val camHeight = (if (player.isScoped) 1.95 else 2.65) + player.jumpHeightMeters + crouchOffset
-                val shoulderOffset = if (player.isScoped) 0.55 else 0.72
+                val camHeight = (if (player.isScoped) 1.90 else 2.48) + player.jumpHeightMeters + crouchOffset
+                val shoulderOffset = if (player.isScoped) 0.52 else 0.72
                 val eyeX = px - fx * zoomBack + rx * shoulderOffset
                 val eyeY = camHeight
                 val eyeZ = pz - fz * zoomBack + rz * shoulderOffset
                 val lookDist = if (player.isScoped) 16.0 else 10.0
                 camera.lookAt(
                     eyeX, eyeY, eyeZ,
-                    (px + fx * lookDist + rx * 0.25).toDouble(),
+                    px + fx * lookDist + rx * 0.25,
                     1.38 + player.jumpHeightMeters + crouchOffset * 0.6,
-                    (pz + fz * lookDist + rz * 0.25).toDouble(),
+                    pz + fz * lookDist + rz * 0.25,
                     0.0, 1.0, 0.0
                 )
             }
@@ -650,10 +666,11 @@ private class Arena3DController {
         swapChain?.let { engine.destroySwapChain(it) }
         characterRigs.values.forEach { it.destroy() }
         characterRigs.clear()
-        (staticEntities + glooPool + bulletPool + lootPool + domePool + auraPool + zoneRingSegments + planeParts + planeRoot + sunEntity + cameraEntity).forEach { e ->
+        (staticEntities + glooPool + bulletPool + lootPool + domePool + auraPool + zoneRingSegments + planeParts + planeRoot + sunEntity + fillLightEntity + cameraEntity).forEach { e ->
             scene.removeEntity(e)
             engine.destroyEntity(e)
         }
+        engine.destroyColorGrading(colorGrading)
         engine.destroySkybox(skybox)
         engine.destroyIndirectLight(indirectLight)
         materials.destroy()

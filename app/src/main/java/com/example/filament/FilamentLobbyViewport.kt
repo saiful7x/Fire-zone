@@ -10,15 +10,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.model.CharacterId
 import com.google.android.filament.Camera
+import com.google.android.filament.ColorGrading
 import com.google.android.filament.Engine
 import com.google.android.filament.EntityManager
 import com.google.android.filament.IndirectLight
@@ -37,12 +36,11 @@ fun FilamentLobbyViewport(
     offsetCharacterLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     var yawDeg by remember { mutableFloatStateOf(16f) }
 
     val holder = remember {
         FilamentInit.ensureInitialized()
-        LobbySceneController(context)
+        LobbySceneController()
     }
 
     LaunchedEffect(characterId) {
@@ -76,16 +74,19 @@ fun FilamentLobbyViewport(
     )
 }
 
-private class LobbySceneController(context: android.content.Context) {
+private class LobbySceneController {
     private val engine: Engine = Engine.create()
     private val renderer: Renderer = engine.createRenderer()
     private val scene: Scene = engine.createScene()
     private val view: View = engine.createView()
     private val cameraEntity: Int = EntityManager.get().create()
     private val camera: Camera = engine.createCamera(cameraEntity)
-    private val sunEntity: Int = EntityManager.get().create()
+    private val keyLightEntity: Int = EntityManager.get().create()
+    private val rimLightEntity: Int = EntityManager.get().create()
+    private val fillLightEntity: Int = EntityManager.get().create()
     private val skybox: Skybox
     private val indirectLight: IndirectLight
+    private val colorGrading: ColorGrading
 
     private val materials = FilamentMaterialBank(engine)
     private val meshes = FilamentMeshBank(engine)
@@ -105,30 +106,48 @@ private class LobbySceneController(context: android.content.Context) {
     init {
         view.scene = scene
         view.camera = camera
+        colorGrading = FilamentPostProcess.configureView(engine, view, enableFog = false)
 
         skybox = Skybox.Builder()
-            .color(0.08f, 0.09f, 0.14f, 1.0f)
+            .color(0.10f, 0.13f, 0.21f, 1.0f)
             .build(engine)
         scene.skybox = skybox
 
         val shBands = floatArrayOf(
-            0.55f, 0.52f, 0.60f,
-            0.0f, 0.1f, 0.1f,
+            0.78f, 0.76f, 0.84f,
+            0.05f, 0.12f, 0.18f,
             0.0f, 0.0f, 0.0f
         )
         indirectLight = IndirectLight.Builder()
             .irradiance(1, shBands)
-            .intensity(28000f)
+            .intensity(34000f)
             .build(engine)
         scene.indirectLight = indirectLight
 
+        // 3-Point Studio Lighting: Warm Key Light + Cool Rim Light + Soft Fill Light
         LightManager.Builder(LightManager.Type.DIRECTIONAL)
-            .color(1.0f, 0.88f, 0.72f)
-            .intensity(115000f)
-            .direction(-0.42f, -0.78f, -0.45f)
+            .color(1.0f, 0.90f, 0.76f)
+            .intensity(120000f)
+            .direction(-0.42f, -0.75f, -0.50f)
             .castShadows(true)
-            .build(engine, sunEntity)
-        scene.addEntity(sunEntity)
+            .build(engine, keyLightEntity)
+        scene.addEntity(keyLightEntity)
+
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .color(0.25f, 0.78f, 1.0f)
+            .intensity(55000f)
+            .direction(0.55f, -0.25f, 0.78f)
+            .castShadows(false)
+            .build(engine, rimLightEntity)
+        scene.addEntity(rimLightEntity)
+
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .color(1.0f, 0.78f, 0.52f)
+            .intensity(32000f)
+            .direction(0.65f, -0.35f, -0.60f)
+            .castShadows(false)
+            .build(engine, fillLightEntity)
+        scene.addEntity(fillLightEntity)
 
         buildLobbyEnvironment()
         characterRig.setVisible(true, showParachute = false)
@@ -137,61 +156,67 @@ private class LobbySceneController(context: android.content.Context) {
 
     private fun buildLobbyEnvironment() {
         val tm = engine.transformManager
-        val floorMat = materials.lit(0xFF141A24, metallic = 0.2f, roughness = 0.75f)
-        val pedestalMat = materials.lit(0xFF1F2735, metallic = 0.65f, roughness = 0.35f)
-        val glowAmberMat = materials.lit(0xFFFFB300, metallic = 0.4f, roughness = 0.3f, emissiveR = 0.9f, emissiveG = 0.58f, emissiveB = 0.05f)
-        val glowCyanMat = materials.lit(0xFF00E5FF, metallic = 0.3f, roughness = 0.3f, emissiveR = 0.0f, emissiveG = 0.75f, emissiveB = 0.95f)
-        val crateMat = materials.lit(0xFF5D4635, metallic = 0.1f, roughness = 0.85f)
-        val pillarMat = materials.lit(0xFF1D2432, metallic = 0.45f, roughness = 0.55f)
+        val tex = materials.textures
+        val floorMat = materials.textured(tex.warehouseFloorMap, tintArgb = 0xFF424B59, metallic = 0.25f, roughness = 0.62f, uvScaleX = 8f, uvScaleY = 8f)
+        val pedestalMat = materials.textured(tex.pedestalMetalMap, tintArgb = 0xFFFFFFFF, metallic = 0.75f, roughness = 0.30f)
+        val glowAmberMat = materials.lit(0xFFFFB300, metallic = 0.4f, roughness = 0.25f, emissiveR = 0.95f, emissiveG = 0.62f, emissiveB = 0.08f)
+        val glowCyanMat = materials.lit(0xFF00E5FF, metallic = 0.3f, roughness = 0.25f, emissiveR = 0.0f, emissiveG = 0.85f, emissiveB = 1.0f)
+        val crateMat = materials.textured(tex.woodCrateMap, tintArgb = 0xFFFFFFFF, metallic = 0.05f, roughness = 0.80f)
+        val blueContainerMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF2B6090, metallic = 0.45f, roughness = 0.46f)
+        val orangeContainerMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFFC7512E, metallic = 0.42f, roughness = 0.48f)
+        val pillarMat = materials.textured(tex.corrugatedMetalMap, tintArgb = 0xFF283244, metallic = 0.55f, roughness = 0.48f, uvScaleX = 1f, uvScaleY = 4f)
 
-        // Courtyard floor
+        // Textured tactical courtyard floor
         val floor = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, floorMat, castShadows = false)
-        tm.setTransform(tm.getInstance(floor), FilamentTransformHelper.buildTRS(0f, -0.25f, 0f, sx = 28f, sy = 0.5f, sz = 24f))
+        tm.setTransform(tm.getInstance(floor), FilamentTransformHelper.buildTRS(0f, -0.25f, 0f, sx = 32f, sy = 0.5f, sz = 28f))
         scene.addEntity(floor)
         propEntities.add(floor)
 
         // Central 3D Pedestal
         val ped = FilamentTransformHelper.spawnMeshEntity(engine, meshes.cylinder, pedestalMat)
-        tm.setTransform(tm.getInstance(ped), FilamentTransformHelper.buildTRS(0f, -0.06f, 0f, sx = 2.4f, sy = 0.14f, sz = 2.4f))
+        tm.setTransform(tm.getInstance(ped), FilamentTransformHelper.buildTRS(0f, -0.06f, 0f, sx = 2.45f, sy = 0.14f, sz = 2.45f))
         scene.addEntity(ped)
         propEntities.add(ped)
 
         pedestalRingEntity = FilamentTransformHelper.spawnMeshEntity(engine, meshes.cylinder, glowAmberMat, castShadows = false)
-        tm.setTransform(tm.getInstance(pedestalRingEntity), FilamentTransformHelper.buildTRS(0f, 0.005f, 0f, sx = 2.55f, sy = 0.03f, sz = 2.55f))
+        tm.setTransform(tm.getInstance(pedestalRingEntity), FilamentTransformHelper.buildTRS(0f, 0.006f, 0f, sx = 2.60f, sy = 0.025f, sz = 2.60f))
         scene.addEntity(pedestalRingEntity)
         propEntities.add(pedestalRingEntity)
 
-        // Tactical Crates & Arena Pillars behind character
-        val crateCoords = listOf(
-            Triple(-3.4f, 0.55f, -3.2f),
-            Triple(3.6f, 0.45f, -2.8f),
-            Triple(-4.2f, 0.38f, -1.8f)
-        )
-        crateCoords.forEach { (cx, cy, cz) ->
+        // Background Corrugated Containers & Wooden Crates
+        val containerL = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, blueContainerMat)
+        tm.setTransform(tm.getInstance(containerL), FilamentTransformHelper.buildTRS(-4.6f, 1.35f, -5.2f, rotYDeg = 24f, sx = 2.6f, sy = 2.7f, sz = 5.4f))
+        scene.addEntity(containerL); propEntities.add(containerL)
+
+        val containerR = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, orangeContainerMat)
+        tm.setTransform(tm.getInstance(containerR), FilamentTransformHelper.buildTRS(4.8f, 1.35f, -5.4f, rotYDeg = -22f, sx = 2.6f, sy = 2.7f, sz = 5.4f))
+        scene.addEntity(containerR); propEntities.add(containerR)
+
+        listOf(
+            Triple(-3.1f, 0.55f, -2.8f),
+            Triple(3.3f, 0.45f, -2.5f),
+            Triple(-2.6f, 0.40f, -1.7f)
+        ).forEach { (cx, cy, cz) ->
             val crate = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, crateMat)
-            tm.setTransform(tm.getInstance(crate), FilamentTransformHelper.buildTRS(cx, cy, cz, rotYDeg = 22f, sx = 1.1f, sy = cy * 2f, sz = 1.1f))
-            scene.addEntity(crate)
-            propEntities.add(crate)
+            tm.setTransform(tm.getInstance(crate), FilamentTransformHelper.buildTRS(cx, cy, cz, rotYDeg = 22f, sx = 1.05f, sy = cy * 2f, sz = 1.05f))
+            scene.addEntity(crate); propEntities.add(crate)
         }
 
-        // Translucent Cyan Gloo Wall showcase shield in lobby background
-        val glooMat = materials.transparent(0.0f, 0.85f, 1.0f, 0.48f)
+        // Translucent Hex-Pattern Cyan Gloo Wall showcase shield
+        val glooMat = materials.texturedTransparent(tex.glooHexMap, r = 0.25f, g = 0.92f, b = 1f, a = 0.68f, uvScaleX = 2f, uvScaleY = 2f)
         val lobbyGloo = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, glooMat, castShadows = false)
-        tm.setTransform(tm.getInstance(lobbyGloo), FilamentTransformHelper.buildTRS(3.2f, 1.05f, -3.9f, rotYDeg = -28f, sx = 2.4f, sy = 2.1f, sz = 0.18f))
-        scene.addEntity(lobbyGloo)
-        propEntities.add(lobbyGloo)
+        tm.setTransform(tm.getInstance(lobbyGloo), FilamentTransformHelper.buildTRS(3.2f, 1.05f, -3.9f, rotYDeg = -28f, sx = 2.4f, sy = 2.1f, sz = 0.16f))
+        scene.addEntity(lobbyGloo); propEntities.add(lobbyGloo)
 
-        // Arena backdrop pillars + glowing strips
-        listOf(-5.5f, -2.2f, 2.2f, 5.5f).forEach { px ->
+        // Arena backdrop pillars + glowing energy strips
+        listOf(-5.6f, -2.2f, 2.2f, 5.6f).forEach { px ->
             val pillar = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, pillarMat)
-            tm.setTransform(tm.getInstance(pillar), FilamentTransformHelper.buildTRS(px, 2.8f, -6.5f, sx = 0.9f, sy = 6.0f, sz = 0.9f))
-            scene.addEntity(pillar)
-            propEntities.add(pillar)
+            tm.setTransform(tm.getInstance(pillar), FilamentTransformHelper.buildTRS(px, 2.9f, -7.2f, sx = 0.95f, sy = 6.2f, sz = 0.95f))
+            scene.addEntity(pillar); propEntities.add(pillar)
 
             val strip = FilamentTransformHelper.spawnMeshEntity(engine, meshes.box, glowCyanMat, castShadows = false)
-            tm.setTransform(tm.getInstance(strip), FilamentTransformHelper.buildTRS(px, 2.8f, -6.02f, sx = 0.12f, sy = 4.6f, sz = 0.08f))
-            scene.addEntity(strip)
-            propEntities.add(strip)
+            tm.setTransform(tm.getInstance(strip), FilamentTransformHelper.buildTRS(px, 2.9f, -6.68f, sx = 0.12f, sy = 4.8f, sz = 0.08f))
+            scene.addEntity(strip); propEntities.add(strip)
         }
     }
 
@@ -217,7 +242,7 @@ private class LobbySceneController(context: android.content.Context) {
                 override fun onResized(width: Int, height: Int) {
                     view.viewport = Viewport(0, 0, width, height)
                     val aspect = width.toDouble() / height.coerceAtLeast(1).toDouble()
-                    camera.setProjection(42.0, aspect, 0.1, 100.0, Camera.Fov.VERTICAL)
+                    camera.setProjection(40.0, aspect, 0.1, 100.0, Camera.Fov.VERTICAL)
                 }
             }
             attachTo(textureView)
@@ -252,18 +277,19 @@ private class LobbySceneController(context: android.content.Context) {
             timeSec = t,
             isMoving = false,
             isFiring = false,
-            scale = 1.05f
+            isLobbyShowcase = true,
+            scale = 1.06f
         )
 
         val tm = engine.transformManager
         tm.setTransform(
             tm.getInstance(pedestalRingEntity),
-            FilamentTransformHelper.buildTRS(cx, 0.01f, 0f, rotYDeg = t * 28f, sx = 2.45f, sy = 0.03f, sz = 2.45f)
+            FilamentTransformHelper.buildTRS(cx, 0.01f, 0f, rotYDeg = t * 28f, sx = 2.52f, sy = 0.025f, sz = 2.52f)
         )
 
         camera.lookAt(
-            0.0, 1.48, 4.15,
-            0.0, 1.05, 0.0,
+            0.0, 1.44, 3.85,
+            0.0, 1.02, 0.0,
             0.0, 1.0, 0.0
         )
 
@@ -283,9 +309,11 @@ private class LobbySceneController(context: android.content.Context) {
             scene.removeEntity(e)
             engine.destroyEntity(e)
         }
-        scene.removeEntity(sunEntity)
-        engine.destroyEntity(sunEntity)
-        engine.destroyEntity(cameraEntity)
+        listOf(keyLightEntity, rimLightEntity, fillLightEntity, cameraEntity).forEach { e ->
+            scene.removeEntity(e)
+            engine.destroyEntity(e)
+        }
+        engine.destroyColorGrading(colorGrading)
         engine.destroySkybox(skybox)
         engine.destroyIndirectLight(indirectLight)
         materials.destroy()
